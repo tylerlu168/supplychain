@@ -1,0 +1,1369 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Control Tower</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+ 
+        :root {
+            --bg: #f0f4f8;
+            --surface: #ffffff;
+            --surface2: #f8fafc;
+            --border: #e2e8f0;
+            --green: #059669;
+            --green-dim: #d1fae5;
+            --green-mid: #10b981;
+            --red: #dc2626;
+            --red-dim: #fee2e2;
+            --red-mid: #ef4444;
+            --blue: #667eea;
+            --blue-dim: #eef2ff;
+            --text: #1e293b;
+            --text-dim: #64748b;
+            --text-muted: #94a3b8;
+            --gold: #d97706;
+            --arrow-default: #cbd5e1;
+            --arrow-active: #667eea;
+        }
+ 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+ 
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+ 
+        /* HEADER */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+ 
+        .header-left { display: flex; align-items: center; gap: 14px; }
+ 
+        .header-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #667eea22, #05996922);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+ 
+        .header-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            color: var(--text);
+        }
+ 
+        .header-sub {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: 'IBM Plex Mono', monospace;
+            margin-top: 2px;
+        }
+ 
+        .header-actions { display: flex; gap: 10px; align-items: center; }
+ 
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text-dim);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s;
+            font-family: 'IBM Plex Sans', sans-serif;
+            display: flex; align-items: center; gap: 6px;
+        }
+ 
+        .btn:hover { border-color: var(--blue); color: var(--blue); }
+        .btn.primary { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+ 
+        .status-pill {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 600;
+        }
+ 
+        .status-pill.ok { background: var(--green-dim); color: var(--green); border: 1px solid #00d97e30; }
+        .status-pill.alert { background: var(--red-dim); color: var(--red); border: 1px solid #ff4d6a30; }
+ 
+        .pulse {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+ 
+        .pulse.green { background: var(--green); box-shadow: 0 0 6px #05996960; }
+        .pulse.red { background: var(--red); box-shadow: 0 0 6px #dc262660; }
+ 
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        /* MAIN LAYOUT */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 65px);
+            position: relative;
+        }
+ 
+        /* CANVAS */
+        .canvas-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+ 
+        .canvas-wrapper {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            position: relative;
+        }
+ 
+        .canvas-wrapper.grabbing { cursor: grabbing; }
+ 
+        .canvas-content {
+            position: absolute;
+            top: 0; left: 0;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+ 
+        /* FLOW */
+        .flow-layer {
+            position: relative;
+            padding: 80px;
+            min-width: 3000px;
+            min-height: 2000px;
+        }
+ 
+        /* SVG CONNECTIONS */
+        svg.connections {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            overflow: visible;
+        }
+ 
+        .conn-path {
+            fill: none;
+            stroke: var(--arrow-default);
+            stroke-width: 2;
+            transition: stroke 0.3s, stroke-width 0.3s;
+        }
+ 
+        .conn-path.highlighted {
+            stroke: var(--arrow-active);
+            stroke-width: 2.5;
+        }
+ 
+        .conn-path.green-line { stroke: #10b981; stroke-opacity: 0.35; }
+        .conn-path.red-line { stroke: #ef4444; stroke-opacity: 0.35; }
+ 
+        /* NODE */
+        .node-wrap {
+            position: absolute;
+            z-index: 5;
+            transition: top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                        left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+ 
+        .process-node {
+            width: 190px;
+            border-radius: 10px;
+            border: 1px solid;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            background: var(--surface);
+            user-select: none;
+            overflow: hidden;
+        }
+ 
+        .process-node::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            border-radius: 10px 10px 0 0;
+        }
+ 
+        .process-node.green {
+            border-color: #10b98140;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .process-node.green::before { background: var(--green); }
+ 
+        .process-node.red {
+            border-color: #ef444440;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .process-node.red::before { background: var(--red); }
+ 
+        .process-node:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            z-index: 20;
+        }
+ 
+        .process-node.green:hover { border-color: var(--green); box-shadow: 0 8px 20px #05996918; }
+        .process-node.red:hover { border-color: var(--red); box-shadow: 0 8px 20px #dc262618; }
+ 
+        .process-node.active {
+            z-index: 30;
+        }
+        .process-node.active.green { border-color: var(--green); box-shadow: 0 0 0 3px #05996920; }
+        .process-node.active.red { border-color: var(--red); box-shadow: 0 0 0 3px #dc262620; }
+ 
+        .node-inner { padding: 14px 16px 14px; }
+ 
+        .node-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+        }
+ 
+        .node-name {
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.3;
+            color: var(--text);
+            flex: 1;
+        }
+ 
+        .expand-btn {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            font-size: 9px;
+            color: var(--text-dim);
+        }
+ 
+        .process-node:hover .expand-btn {
+            border-color: currentColor;
+        }
+ 
+        .process-node.green .expand-btn { color: var(--green); }
+        .process-node.red .expand-btn { color: var(--red); }
+ 
+        .expand-btn.open {
+            transform: rotate(90deg);
+            background: var(--surface2);
+        }
+ 
+        .node-meta {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+ 
+        .node-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 0.05em;
+        }
+ 
+        .node-badge.green { background: var(--green-dim); color: var(--green); }
+        .node-badge.red { background: var(--red-dim); color: var(--red); }
+ 
+        .node-children-count {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: 'IBM Plex Mono', monospace;
+        }
+ 
+        .gate-tag {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 0.1em;
+        }
+ 
+        .gate-tag.and { background: #1e3a8a30; border: 1px solid #3b82f650; color: #60a5fa; }
+        .gate-tag.or { background: #78350f30; border: 1px solid #f59e0b50; color: #fbbf24; }
+ 
+        /* RIGHT SIDEBAR */
+        .right-sidebar {
+            width: 360px;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            z-index: 60;
+        }
+
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 15px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .stat-card.green {
+            background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+            border-color: var(--green);
+        }
+
+        .stat-card.red {
+            background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+            border-color: var(--red);
+        }
+
+        .stat-card.blue {
+            background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+            border-color: var(--blue);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .stat-card.green .stat-label,
+        .stat-card.green .stat-value {
+            color: var(--green);
+        }
+
+        .stat-card.red .stat-label,
+        .stat-card.red .stat-value {
+            color: var(--red);
+        }
+
+        .stat-card.blue .stat-label,
+        .stat-card.blue .stat-value {
+            color: var(--blue);
+        }
+
+        /* Chart */
+        .chart-container {
+            height: 200px;
+            position: relative;
+        }
+
+        /* Locations */
+        .location-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--surface2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .location-item:hover {
+            border-color: var(--blue);
+        }
+
+        .location-marker {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .location-marker.green {
+            background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+        }
+
+        .location-marker.red {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+        }
+
+        .location-info {
+            flex: 1;
+        }
+
+        .location-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .location-coords {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .location-status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .location-status.green {
+            background: var(--green-dim);
+            color: var(--green);
+        }
+
+        .location-status.red {
+            background: var(--red-dim);
+            color: var(--red);
+        }
+
+        /* SIDE PANEL (Details) */
+        .side-panel {
+            position: absolute;
+            right: 360px;
+            top: 0;
+            height: 100%;
+            width: 0;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            overflow: hidden;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 50;
+        }
+ 
+        .side-panel.open { width: 340px; }
+ 
+        .panel-inner {
+            width: 340px;
+            height: 100%;
+            padding: 0;
+            overflow-y: auto;
+        }
+ 
+        .panel-top {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            position: sticky; top: 0;
+            background: var(--surface);
+            z-index: 2;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+ 
+        .panel-name {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.2;
+            max-width: 240px;
+        }
+ 
+        .close-btn {
+            width: 28px; height: 28px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-dim);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .close-btn:hover { border-color: var(--red); color: var(--red); }
+ 
+        .panel-body { padding: 20px; }
+ 
+        .panel-row {
+            margin-bottom: 18px;
+        }
+ 
+        .panel-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+ 
+        .panel-value {
+            font-size: 14px;
+            color: var(--text);
+            padding: 10px 12px;
+            background: var(--surface2);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+ 
+        .panel-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+ 
+        .panel-status-badge.green { background: var(--green-dim); color: var(--green); border: 1px solid #00d97e25; }
+        .panel-status-badge.red { background: var(--red-dim); color: var(--red); border: 1px solid #ff4d6a25; }
+ 
+        .child-list { display: flex; flex-direction: column; gap: 6px; }
+ 
+        .child-item {
+            padding: 10px 12px;
+            background: var(--surface2);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+ 
+        .child-item:hover { border-color: var(--blue); }
+ 
+        .child-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .child-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .child-dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+ 
+        .child-name { font-size: 13px; color: var(--text); font-weight: 600; }
+        .child-status { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+ 
+        /* CONTROLS */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 40;
+        }
+ 
+        .ctrl-btn {
+            width: 40px; height: 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-dim);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+ 
+        .ctrl-btn:hover { border-color: var(--blue); color: var(--blue); }
+ 
+        /* LEGEND */
+        .legend {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 40;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+ 
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+ 
+        .l-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .l-dot.green { background: var(--green); }
+        .l-dot.red { background: var(--red); }
+ 
+        .l-icon { font-size: 12px; }
+ 
+        /* scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+ 
+        /* animate new nodes appearing */
+        @keyframes nodeIn {
+            from { opacity: 0; transform: scale(0.88); }
+            to { opacity: 1; transform: scale(1); }
+        }
+ 
+        .node-wrap.entering .process-node {
+            animation: nodeIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        @media (max-width: 1400px) {
+            .right-sidebar {
+                width: 320px;
+            }
+            .side-panel {
+                right: 320px;
+            }
+        }
+    </style>
+</head>
+<body>
+ 
+<div class="header">
+    <div class="header-left">
+        <div class="header-icon"></div>
+        <div>
+            <div class="header-title">Supply Chain Control Tower</div>
+            <div class="header-sub">INTERACTIVE PROCESS VISUALIZATION</div>
+        </div>
+    </div>
+    <div class="header-actions">
+        <div class="status-pill ok" id="overallStatus">
+            <div class="pulse green" id="statusPulse"></div>
+            <span id="statusText">OPERATIONAL</span>
+        </div>
+        <a href="admin.html" class="btn primary">⚙ Admin</a>
+    </div>
+</div>
+ 
+<div class="main-container">
+    <div class="canvas-area">
+        <div class="legend">
+            <div class="legend-item"><div class="l-dot green"></div> Operational</div>
+            <div class="legend-item"><div class="l-dot red"></div> Alert</div>
+            <div class="legend-item"><span class="l-icon">▶</span> Click to expand</div>
+            <div class="legend-item"><span class="l-icon">⊕</span> Drag to pan</div>
+        </div>
+ 
+        <div class="controls">
+            <button class="ctrl-btn" onclick="zoomIn()" title="Zoom In">+</button>
+            <button class="ctrl-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+            <button class="ctrl-btn" onclick="resetView()" title="Reset View" style="font-size:13px;">⟲</button>
+            <button class="ctrl-btn" onclick="collapseAll()" title="Collapse All" style="font-size:11px;">◈</button>
+        </div>
+ 
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <div class="canvas-content" id="canvasContent">
+                <div class="flow-layer" id="flowLayer">
+                    <svg class="connections" id="connections">
+                        <defs>
+                            <marker id="arrow-default" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L8,3 z" fill="#cbd5e1"/>
+                            </marker>
+                            <marker id="arrow-active" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L8,3 z" fill="#667eea"/>
+                            </marker>
+                            <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L8,3 z" fill="#10b981"/>
+                            </marker>
+                            <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+            </div>
+        </div>
+ 
+        <div class="side-panel" id="sidePanel">
+            <div class="panel-inner">
+                <div class="panel-top">
+                    <div class="panel-name" id="panelName"></div>
+                    <button class="close-btn" onclick="closePanel()">×</button>
+                </div>
+                <div class="panel-body" id="panelBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="right-sidebar">
+        <div class="sidebar-section">
+            <div class="section-title">System Health</div>
+            <div class="stats-grid">
+                <div class="stat-card green">
+                    <div class="stat-label">Healthy</div>
+                    <div class="stat-value" id="healthyCount">0</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-label">Alerts</div>
+                    <div class="stat-value" id="alertCount">0</div>
+                </div>
+                <div class="stat-card blue">
+                    <div class="stat-label">Total</div>
+                    <div class="stat-value" id="totalCount">0</div>
+                </div>
+                <div class="stat-card blue">
+                    <div class="stat-label">Efficiency</div>
+                    <div class="stat-value" id="efficiencyValue">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="section-title">Status Distribution</div>
+            <div class="chart-container">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="section-title">Facility Locations</div>
+            <div id="locationsList"></div>
+        </div>
+    </div>
+</div>
+ 
+<script>
+    // ─── DATA ────────────────────────────────────────────────────────────────────
+    let processData = localStorage.getItem('supplyChainData')
+        ? JSON.parse(localStorage.getItem('supplyChainData'))
+        : {
+            tier0: [
+                {
+                    id: 'mixing', name: 'Mixing', color: 'green',
+                    location: { lat: 33.7490, lng: -84.3880 }, gateType: 'or',
+                    children: [
+                        { id: 'raw-material-prep', name: 'Raw Material Prep', color: 'green' },
+                        { id: 'blending', name: 'Blending', color: 'green' },
+                        { id: 'quality-check-1', name: 'Quality Check', color: 'red' }
+                    ]
+                },
+                {
+                    id: 'forming', name: 'Forming', color: 'green',
+                    location: { lat: 33.7590, lng: -84.3980 }, gateType: 'and',
+                    children: [
+                        { id: 'molding', name: 'Molding', color: 'green' },
+                        { id: 'cutting', name: 'Cutting', color: 'green' },
+                        { id: 'shaping', name: 'Shaping', color: 'green' }
+                    ]
+                },
+                {
+                    id: 'pressing', name: 'Pressing', color: 'green',
+                    location: { lat: 33.7690, lng: -84.4080 }, gateType: 'or',
+                    children: [
+                        { id: 'pre-heat', name: 'Pre-Heat', color: 'green' },
+                        { id: 'compression', name: 'Compression', color: 'red' },
+                        { id: 'cooling', name: 'Cooling', color: 'green' }
+                    ]
+                },
+                {
+                    id: 'rolling', name: 'Rolling', color: 'red',
+                    location: { lat: 33.7390, lng: -84.3780 }, gateType: 'and',
+                    children: [
+                        {
+                            id: 'hot-rolling', name: 'Hot Rolling', color: 'red', gateType: 'or',
+                            children: [
+                                { id: 'furnace-heating', name: 'Furnace Heating', color: 'red' },
+                                { id: 'roughing-mill', name: 'Roughing Mill', color: 'green' },
+                                { id: 'finishing-mill', name: 'Finishing Mill', color: 'green' }
+                            ]
+                        },
+                        {
+                            id: 'pickling', name: 'Pickling', color: 'green', gateType: 'and',
+                            children: [
+                                { id: 'acid-bath', name: 'Acid Bath', color: 'green' },
+                                { id: 'rinsing', name: 'Rinsing', color: 'green' },
+                                { id: 'drying', name: 'Drying', color: 'green' }
+                            ]
+                        },
+                        {
+                            id: 'cold-rolling', name: 'Cold Rolling', color: 'green', gateType: 'and',
+                            children: [
+                                { id: 'tension-leveling', name: 'Tension Leveling', color: 'green' },
+                                { id: 'reduction-rolling', name: 'Reduction Rolling', color: 'green' }
+                            ]
+                        },
+                        {
+                            id: 'galvanizing', name: 'Galvanizing', color: 'green', gateType: 'and',
+                            children: [
+                                { id: 'zinc-coating', name: 'Zinc Coating', color: 'green' },
+                                { id: 'air-knife', name: 'Air Knife', color: 'green' },
+                                { id: 'final-cooling', name: 'Final Cooling', color: 'green' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'sizing', name: 'Sizing', color: 'green',
+                    location: { lat: 33.7290, lng: -84.3680 }, gateType: 'and',
+                    children: [
+                        { id: 'measuring', name: 'Measuring', color: 'green' },
+                        { id: 'trimming', name: 'Trimming', color: 'green' },
+                        { id: 'final-inspection', name: 'Final Inspection', color: 'green' }
+                    ]
+                }
+            ]
+        };
+ 
+    // ─── STATE ───────────────────────────────────────────────────────────────────
+    const expanded = new Set();
+    let selectedId = null;
+    let nodeElements = new Map();
+    let statusChart = null;
+ 
+    // pan/zoom
+    let scale = 1, tx = 60, ty = 40;
+    let dragging = false, dragStartX, dragStartY;
+ 
+    // ─── HELPERS ─────────────────────────────────────────────────────────────────
+    function calcColor(node) {
+        if (!node.children || node.children.length === 0) return node.color;
+        const cc = node.children.map(calcColor);
+        if (node.gateType === 'and') return cc.every(c => c === 'green') ? 'green' : 'red';
+        if (node.gateType === 'or')  return cc.every(c => c === 'red')   ? 'red'   : 'green';
+        return node.color;
+    }
+ 
+    function getAllNodes(tier0) {
+        const result = [];
+        function walk(nodes) {
+            nodes.forEach(n => {
+                result.push(n);
+                if (n.children) walk(n.children);
+            });
+        }
+        walk(tier0);
+        return result;
+    }
+ 
+    // ─── LAYOUT ENGINE ───────────────────────────────────────────────────────────
+    const COL_W  = 260;
+    const ROW_H  = 90;
+    const ORIGIN_X = 80;
+    const ORIGIN_Y = 60;
+    const NODE_W = 190;
+    const NODE_H = 80;
+ 
+    function buildLayout() {
+        const items = [];
+        let rowCounter = 0;
+ 
+        function place(nodes, col, parentId) {
+            nodes.forEach(node => {
+                const row = rowCounter++;
+                items.push({ node, col, row, parentId });
+                if (expanded.has(node.id) && node.children && node.children.length > 0) {
+                    place(node.children, col + 1, node.id);
+                }
+            });
+        }
+ 
+        place(processData.tier0, 0, null);
+        return items;
+    }
+ 
+    function itemPos(item) {
+        return {
+            x: ORIGIN_X + item.col * COL_W,
+            y: ORIGIN_Y + item.row * ROW_H
+        };
+    }
+ 
+    // ─── STATS ───────────────────────────────────────────────────────────────────
+    function updateStats() {
+        const allNodes = getAllNodes(processData.tier0);
+        const healthy = allNodes.filter(n => calcColor(n) === 'green').length;
+        const alerts = allNodes.length - healthy;
+        const efficiency = Math.round((healthy / allNodes.length) * 100);
+
+        document.getElementById('healthyCount').textContent = healthy;
+        document.getElementById('alertCount').textContent = alerts;
+        document.getElementById('totalCount').textContent = allNodes.length;
+        document.getElementById('efficiencyValue').textContent = efficiency + '%';
+
+        return { healthy, alerts };
+    }
+
+    function updateChart(stats) {
+        if (statusChart) statusChart.destroy();
+
+        const ctx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Healthy', 'Alerts'],
+                datasets: [{
+                    data: [stats.healthy, stats.alerts],
+                    backgroundColor: ['#10b981', '#ef4444'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { family: "'IBM Plex Sans', sans-serif" }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateLocations() {
+        const container = document.getElementById('locationsList');
+        container.innerHTML = '';
+
+        const facilities = processData.tier0.filter(p => p.location);
+
+        if (facilities.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">No facility locations configured</div>';
+            return;
+        }
+
+        facilities.forEach(facility => {
+            const color = calcColor(facility);
+            const div = document.createElement('div');
+            div.className = 'location-item';
+            div.innerHTML = `
+                <div class="location-marker ${color}">📍</div>
+                <div class="location-info">
+                    <div class="location-name">${facility.name}</div>
+                    <div class="location-coords">${facility.location.lat.toFixed(4)}, ${facility.location.lng.toFixed(4)}</div>
+                </div>
+                <div class="location-status ${color}">
+                    ${color === 'green' ? '✓ OK' : '⚠ ALERT'}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+ 
+    // ─── RENDER ──────────────────────────────────────────────────────────────────
+    let layoutItems = [];
+ 
+    function render() {
+        layoutItems = buildLayout();
+ 
+        const flowLayer = document.getElementById('flowLayer');
+ 
+        const activeIds = new Set(layoutItems.map(i => i.node.id));
+ 
+        nodeElements.forEach((el, id) => {
+            if (!activeIds.has(id)) {
+                el.remove();
+                nodeElements.delete(id);
+            }
+        });
+ 
+        layoutItems.forEach(item => {
+            const { node } = item;
+            const color = calcColor(node);
+            const pos = itemPos(item);
+            const hasChildren = node.children && node.children.length > 0;
+            const isExpanded = expanded.has(node.id);
+ 
+            if (!nodeElements.has(node.id)) {
+                const wrap = document.createElement('div');
+                wrap.className = 'node-wrap entering';
+                wrap.dataset.id = node.id;
+                wrap.style.left = pos.x + 'px';
+                wrap.style.top  = pos.y + 'px';
+ 
+                const el = document.createElement('div');
+                el.className = `process-node ${color}`;
+                el.innerHTML = buildNodeHTML(node, color, hasChildren, isExpanded);
+ 
+                el.addEventListener('click', e => {
+                    e.stopPropagation();
+                    handleNodeClick(node.id);
+                });
+ 
+                wrap.appendChild(el);
+                flowLayer.appendChild(wrap);
+                nodeElements.set(node.id, wrap);
+ 
+                requestAnimationFrame(() => wrap.classList.remove('entering'));
+            } else {
+                const wrap = nodeElements.get(node.id);
+                wrap.style.left = pos.x + 'px';
+                wrap.style.top  = pos.y + 'px';
+ 
+                const el = wrap.querySelector('.process-node');
+                el.className = `process-node ${color}${selectedId === node.id ? ' active' : ''}`;
+                el.innerHTML = buildNodeHTML(node, color, hasChildren, isExpanded);
+ 
+                el.addEventListener('click', e => {
+                    e.stopPropagation();
+                    handleNodeClick(node.id);
+                });
+            }
+        });
+ 
+        drawConnections();
+        updateOverallStatus();
+        const stats = updateStats();
+        updateChart(stats);
+        updateLocations();
+    }
+ 
+    function buildNodeHTML(node, color, hasChildren, isExpanded) {
+        const badge = `<span class="node-badge ${color}">${color === 'green' ? '● ON' : '● ERR'}</span>`;
+        const expandBtn = hasChildren
+            ? `<div class="expand-btn ${isExpanded ? 'open' : ''}">▶</div>`
+            : '';
+        const childCount = hasChildren
+            ? `<span class="node-children-count">${node.children.length} sub</span>`
+            : '';
+        const gate = node.gateType
+            ? `<span class="gate-tag ${node.gateType}">${node.gateType.toUpperCase()}</span>`
+            : '';
+ 
+        return `
+            <div class="node-inner">
+                <div class="node-header">
+                    <div class="node-name">${node.name}</div>
+                    ${expandBtn}
+                </div>
+                <div class="node-meta">
+                    ${badge}
+                    <div style="display:flex;align-items:center;gap:5px">
+                        ${gate}
+                        ${childCount}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+ 
+    // ─── CONNECTIONS ─────────────────────────────────────────────────────────────
+    function drawConnections() {
+        const svg = document.getElementById('connections');
+        const paths = svg.querySelectorAll('path.conn-path');
+        paths.forEach(p => p.remove());
+ 
+        const itemMap = new Map();
+        layoutItems.forEach(i => itemMap.set(i.node.id, i));
+ 
+        layoutItems.forEach(item => {
+            if (!item.parentId) return;
+            const parentItem = itemMap.get(item.parentId);
+            if (!parentItem) return;
+ 
+            const from = itemPos(parentItem);
+            const to   = itemPos(item);
+ 
+            const fx = from.x + NODE_W;
+            const fy = from.y + NODE_H / 2;
+            const tx2 = to.x;
+            const ty2 = to.y + NODE_H / 2;
+ 
+            const cx1 = fx + (tx2 - fx) * 0.5;
+            const cy1 = fy;
+            const cx2 = fx + (tx2 - fx) * 0.5;
+            const cy2 = ty2;
+ 
+            const d = `M ${fx} ${fy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx2} ${ty2}`;
+ 
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('class', 'conn-path');
+ 
+            const parentColor = calcColor(parentItem.node);
+            const childColor  = calcColor(item.node);
+ 
+            const isHighlighted = selectedId && (item.node.id === selectedId || item.parentId === selectedId);
+ 
+            if (isHighlighted) {
+                path.setAttribute('class', 'conn-path highlighted');
+                path.setAttribute('marker-end', 'url(#arrow-active)');
+            } else if (parentColor === 'green' && childColor === 'green') {
+                path.setAttribute('class', 'conn-path green-line');
+                path.setAttribute('marker-end', 'url(#arrow-green)');
+            } else if (parentColor === 'red' || childColor === 'red') {
+                path.setAttribute('class', 'conn-path red-line');
+                path.setAttribute('marker-end', 'url(#arrow-red)');
+            } else {
+                path.setAttribute('marker-end', 'url(#arrow-default)');
+            }
+ 
+            svg.appendChild(path);
+        });
+    }
+ 
+    // ─── INTERACTIONS ────────────────────────────────────────────────────────────
+    function handleNodeClick(id) {
+        const item = layoutItems.find(i => i.node.id === id);
+        if (!item) return;
+        const node = item.node;
+ 
+        if (node.children && node.children.length > 0) {
+            if (expanded.has(id)) {
+                collapseSubtree(id);
+            } else {
+                expanded.add(id);
+            }
+        }
+ 
+        if (selectedId === id) {
+            selectedId = null;
+            closePanel();
+        } else {
+            selectedId = id;
+            showPanel(node);
+        }
+ 
+        render();
+    }
+ 
+    function collapseSubtree(id) {
+        expanded.delete(id);
+        const item = layoutItems.find(i => i.node.id === id);
+        if (item && item.node.children) {
+            item.node.children.forEach(child => collapseSubtree(child.id));
+        }
+    }
+ 
+    function collapseAll() {
+        expanded.clear();
+        selectedId = null;
+        closePanel();
+        render();
+    }
+ 
+    // ─── SIDE PANEL ──────────────────────────────────────────────────────────────
+    function showPanel(node) {
+        const color = calcColor(node);
+        document.getElementById('panelName').textContent = node.name;
+ 
+        let html = `
+            <div class="panel-row">
+                <div class="panel-label">Status</div>
+                <div>
+                    <span class="panel-status-badge ${color}">
+                        <div class="pulse ${color}"></div>
+                        ${color === 'green' ? 'Operational' : 'Alert'}
+                    </span>
+                </div>
+            </div>
+        `;
+ 
+        if (node.gateType) {
+            html += `
+                <div class="panel-row">
+                    <div class="panel-label">Logic Gate</div>
+                    <div class="panel-value" style="font-family:'IBM Plex Mono',monospace;font-size:12px;">
+                        <span class="gate-tag ${node.gateType}" style="font-size:11px">${node.gateType.toUpperCase()}</span>
+                        &nbsp; ${node.gateType === 'and'
+                            ? 'All children must be green'
+                            : 'Any green child = parent green'}
+                    </div>
+                </div>
+            `;
+        }
+ 
+        if (node.location) {
+            html += `
+                <div class="panel-row">
+                    <div class="panel-label">Location</div>
+                    <div class="panel-value" style="font-family:'IBM Plex Mono',monospace;font-size:12px;">
+                        ${node.location.lat.toFixed(4)}, ${node.location.lng.toFixed(4)}
+                    </div>
+                </div>
+            `;
+        }
+ 
+        if (node.children && node.children.length > 0) {
+            html += `
+                <div class="panel-row">
+                    <div class="panel-label">Sub-Processes (${node.children.length})</div>
+                    <div class="child-list">
+                        ${node.children.map(child => {
+                            const cc = calcColor(child);
+                            return `
+                                <div class="child-item" onclick="handleNodeClick('${child.id}')">
+                                    <div class="child-dot ${cc}"></div>
+                                    <div>
+                                        <div class="child-name">${child.name}</div>
+                                        <div class="child-status">${cc === 'green' ? '✓ Operational' : '⚠ Alert'}</div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+ 
+        html += `
+            <div class="panel-row">
+                <div class="panel-label">Process ID</div>
+                <div class="panel-value" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${node.id}</div>
+            </div>
+        `;
+ 
+        document.getElementById('panelBody').innerHTML = html;
+        document.getElementById('sidePanel').classList.add('open');
+    }
+ 
+    function closePanel() {
+        document.getElementById('sidePanel').classList.remove('open');
+        if (selectedId) {
+            selectedId = null;
+            render();
+        }
+    }
+ 
+    // ─── OVERALL STATUS ──────────────────────────────────────────────────────────
+    function updateOverallStatus() {
+        const anyRed = processData.tier0.some(n => calcColor(n) === 'red');
+        const pill = document.getElementById('overallStatus');
+        const pulse = document.getElementById('statusPulse');
+        const txt = document.getElementById('statusText');
+ 
+        if (anyRed) {
+            pill.className = 'status-pill alert';
+            pulse.className = 'pulse red';
+            txt.textContent = 'ALERT';
+        } else {
+            pill.className = 'status-pill ok';
+            pulse.className = 'pulse green';
+            txt.textContent = 'OPERATIONAL';
+        }
+    }
+ 
+    // ─── PAN / ZOOM ──────────────────────────────────────────────────────────────
+    const wrapper = document.getElementById('canvasWrapper');
+    const content = document.getElementById('canvasContent');
+ 
+    function applyTransform() {
+        content.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    }
+ 
+    wrapper.addEventListener('mousedown', e => {
+        if (e.target === wrapper || e.target.id === 'canvasContent' ||
+            e.target.closest('.flow-layer') && !e.target.closest('.process-node')) {
+            dragging = true;
+            wrapper.classList.add('grabbing');
+            dragStartX = e.clientX - tx;
+            dragStartY = e.clientY - ty;
+        }
+    });
+ 
+    document.addEventListener('mousemove', e => {
+        if (dragging) {
+            tx = e.clientX - dragStartX;
+            ty = e.clientY - dragStartY;
+            applyTransform();
+        }
+    });
+ 
+    document.addEventListener('mouseup', () => {
+        dragging = false;
+        wrapper.classList.remove('grabbing');
+    });
+ 
+    wrapper.addEventListener('wheel', e => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        scale = Math.min(Math.max(scale * delta, 0.2), 3);
+        applyTransform();
+    }, { passive: false });
+ 
+    function zoomIn()    { scale = Math.min(scale * 1.2, 3); applyTransform(); }
+    function zoomOut()   { scale = Math.max(scale / 1.2, 0.2); applyTransform(); }
+    function resetView() { scale = 1; tx = 60; ty = 40; applyTransform(); }
+ 
+    // ─── AUTO REFRESH ────────────────────────────────────────────────────────────
+    setInterval(() => {
+        const stored = localStorage.getItem('supplyChainData');
+        if (stored) {
+            const newData = JSON.parse(stored);
+            if (JSON.stringify(newData) !== JSON.stringify(processData)) {
+                processData = newData;
+                render();
+            }
+        }
+    }, 1000);
+ 
+    // ─── BOOT ────────────────────────────────────────────────────────────────────
+    applyTransform();
+    render();
+</script>
+</body>
+</html>
